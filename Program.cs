@@ -26,6 +26,7 @@ app.MapGet("/", async () =>
         {
             var connectionString =
                 $"Host={dbHost};" +
+                $"Port=6432;" +
                 $"Database={dbName};" +
                 $"Username={dbUser};" +
                 $"Password={dbPassword};" +
