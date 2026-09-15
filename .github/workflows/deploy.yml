@@ -9,7 +9,7 @@ env:
   YC_CLOUD_ID: blg5q3btafh1te7rk8h8
   YC_FOLDER_ID: blgshtn0beto8b2cj1r3
   REGISTRY_ID: crp2o73cdn810tuinho3
-  K8S_CLUSTER_NAME: exam-k8s
+  K8S_CLUSTER_ID: catvjm6pvsrbhokrm02f
 
 jobs:
   deploy:
@@ -85,9 +85,9 @@ jobs:
           export PATH="$HOME/yandex-cloud/bin:$PATH"
 
           yc managed-kubernetes cluster get-credentials \
-            "$K8S_CLUSTER_NAME" \
-            --external \
-            --force
+      		"$K8S_CLUSTER_ID" \
+      		--external \
+      		--force
 
       - name: Deploy new image to Kubernetes
         run: |
