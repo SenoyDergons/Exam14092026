@@ -1,0 +1,108 @@
+name: Build and Deploy to Yandex Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  YC_CLOUD_ID: blg5q3btafh1te7rk8h8
+  YC_FOLDER_ID: blgshtn0beto8b2cj1r3
+  REGISTRY_ID: crp2o73cdn810tuinho3
+  K8S_CLUSTER_NAME: exam-k8s
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | \
+            bash -s -- -i "$HOME/yandex-cloud" -n
+
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate in Yandex Cloud
+        env:
+          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
+        run: |
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          printf '%s' "$YC_SA_KEY" > yc-key.json
+
+          yc config profile create github-actions
+          yc config set service-account-key yc-key.json
+          yc config set cloud-id "$YC_CLOUD_ID"
+          yc config set folder-id "$YC_FOLDER_ID"
+
+          rm yc-key.json
+
+      - name: Authenticate Docker in Yandex Container Registry
+        run: |
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          yc iam create-token | \
+            docker login \
+              --username iam \
+              --password-stdin \
+              cr.yandex
+
+      - name: Build Docker image
+        run: |
+          IMAGE="cr.yandex/${REGISTRY_ID}/app:${GITHUB_SHA}"
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            --load \
+            -t "$IMAGE" \
+            .
+
+      - name: Push Docker image
+        run: |
+          IMAGE="cr.yandex/${REGISTRY_ID}/app:${GITHUB_SHA}"
+          docker push "$IMAGE"
+
+      - name: Install kubectl
+        run: |
+          KUBECTL_VERSION="$(curl -L -s https://dl.k8s.io/release/stable.txt)"
+
+          curl -LO \
+            "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+          kubectl version --client
+
+      - name: Connect to Kubernetes
+        run: |
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          yc managed-kubernetes cluster get-credentials \
+            "$K8S_CLUSTER_NAME" \
+            --external \
+            --force
+
+      - name: Deploy new image to Kubernetes
+        run: |
+          IMAGE="cr.yandex/${REGISTRY_ID}/app:${GITHUB_SHA}"
+
+          CONTAINER_NAME="$(kubectl get deployment web-app \
+            -o jsonpath='{.spec.template.spec.containers[0].name}')"
+
+          echo "Updating container: $CONTAINER_NAME"
+          echo "New image: $IMAGE"
+
+          kubectl set image \
+            deployment/web-app \
+            "$CONTAINER_NAME=$IMAGE"
+
+          kubectl rollout status \
+            deployment/web-app \
+            --timeout=180s
