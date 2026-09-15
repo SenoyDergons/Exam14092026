@@ -5,6 +5,8 @@ on:
     branches:
       - main
 
+  workflow_dispatch:
+
 env:
   YC_CLOUD_ID: blg5q3btafh1te7rk8h8
   YC_FOLDER_ID: blgshtn0beto8b2cj1r3
@@ -32,14 +34,14 @@ jobs:
         run: |
           export PATH="$HOME/yandex-cloud/bin:$PATH"
 
-          printf '%s' "$YC_SA_KEY" > yc-key.json
+          printf '%s' "$YC_SA_KEY" > "$RUNNER_TEMP/yc-key.json"
 
           yc config profile create github-actions
-          yc config set service-account-key yc-key.json
+          yc config set service-account-key "$RUNNER_TEMP/yc-key.json"
           yc config set cloud-id "$YC_CLOUD_ID"
           yc config set folder-id "$YC_FOLDER_ID"
 
-          rm yc-key.json
+          rm "$RUNNER_TEMP/yc-key.json"
 
       - name: Authenticate Docker in Yandex Container Registry
         run: |
@@ -85,9 +87,9 @@ jobs:
           export PATH="$HOME/yandex-cloud/bin:$PATH"
 
           yc managed-kubernetes cluster get-credentials \
-      		"$K8S_CLUSTER_ID" \
-      		--external \
-      		--force
+            "$K8S_CLUSTER_ID" \
+            --external \
+            --force
 
       - name: Deploy new image to Kubernetes
         run: |
@@ -101,7 +103,7 @@ jobs:
 
           kubectl set image \
             deployment/web-app \
-            "$CONTAINER_NAME=$IMAGE"
+            "${CONTAINER_NAME}=${IMAGE}"
 
           kubectl rollout status \
             deployment/web-app \
